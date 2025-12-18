@@ -566,6 +566,7 @@ class GF_Klaviyo extends GFFeedAddOn {
 			$list_name = $list['attributes']['name'];
 
 			$choices[] = array(
+				'name'  => 'lists', // Must match the field name for checkbox fields
 				'label' => esc_html( $list_name ),
 				'value' => esc_attr( $list_id ),
 			);
