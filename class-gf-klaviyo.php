@@ -180,6 +180,9 @@ class GF_Klaviyo extends GFFeedAddOn {
 	 * @return array
 	 */
 	public function feed_settings_fields() {
+		// Get Klaviyo lists for the dropdown
+		$list_choices = $this->get_klaviyo_list_choices();
+
 		$standard_fields = array(
 			array(
 				'name'     => 'feedName',
@@ -190,16 +193,24 @@ class GF_Klaviyo extends GFFeedAddOn {
 				'tooltip'  => '<h6>' . esc_html__( 'Feed Name', 'gravityforms-klaviyo' ) . '</h6>' . esc_html__( 'Enter a name for this feed. This will help you identify it later.', 'gravityforms-klaviyo' ),
 			),
 			array(
+				'name'     => 'lists',
+				'label'    => esc_html__( 'List', 'gravityforms-klaviyo' ),
+				'type'     => 'select',
+				'required' => true,
+				'choices'  => $list_choices,
+				'tooltip'  => '<h6>' . esc_html__( 'List', 'gravityforms-klaviyo' ) . '</h6>' . esc_html__( 'Select a Klaviyo list to subscribe the person to. This field is required.', 'gravityforms-klaviyo' ),
+			),
+		);
+
+		// Klaviyo standard profile fields (different from Drip)
+		$standard_klaviyo_fields = array(
+			array(
 				'name'     => 'email',
 				'label'    => esc_html__( 'Email Address', 'gravityforms-klaviyo' ),
 				'type'     => 'field_select',
 				'required' => true,
 				'tooltip'  => '<h6>' . esc_html__( 'Email Address', 'gravityforms-klaviyo' ) . '</h6>' . esc_html__( 'Select the form field that contains the email address. This field is required.', 'gravityforms-klaviyo' ),
 			),
-		);
-
-		// Klaviyo standard profile fields (different from Drip)
-		$standard_klaviyo_fields = array(
 			array(
 				'name'     => 'first_name',
 				'label'    => esc_html__( 'First Name', 'gravityforms-klaviyo' ),
@@ -253,18 +264,6 @@ class GF_Klaviyo extends GFFeedAddOn {
 			),
 		);
 
-		// Get Klaviyo lists for the multi-select dropdown
-		$list_choices = $this->get_klaviyo_list_choices();
-
-		$lists_field = array(
-			'name'     => 'lists',
-			'label'    => esc_html__( 'Lists', 'gravityforms-klaviyo' ),
-			'type'     => 'checkbox',
-			'required' => true,
-			'choices'  => $list_choices,
-			'tooltip'  => '<h6>' . esc_html__( 'Lists', 'gravityforms-klaviyo' ) . '</h6>' . esc_html__( 'Select one or more Klaviyo lists to subscribe the person to. At least one list is required.', 'gravityforms-klaviyo' ),
-		);
-
 		// Consent field - required by Klaviyo
 		$consent_field = array(
 			'name'     => 'consent',
@@ -314,16 +313,12 @@ class GF_Klaviyo extends GFFeedAddOn {
 				'fields' => $standard_fields,
 			),
 			array(
-				'title'  => esc_html__( 'Profile Information', 'gravityforms-klaviyo' ),
+				'title'  => esc_html__( 'Standard Fields', 'gravityforms-klaviyo' ),
 				'fields' => $standard_klaviyo_fields,
 			),
 			array(
 				'title'  => esc_html__( 'Custom Properties', 'gravityforms-klaviyo' ),
 				'fields' => $custom_fields,
-			),
-			array(
-				'title'  => esc_html__( 'Lists', 'gravityforms-klaviyo' ),
-				'fields' => array( $lists_field ),
 			),
 			array(
 				'title'  => esc_html__( 'Consent', 'gravityforms-klaviyo' ),
@@ -489,10 +484,16 @@ class GF_Klaviyo extends GFFeedAddOn {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @return array Array of choices for checkbox field
+	 * @return array Array of choices for select field
 	 */
 	public function get_klaviyo_list_choices() {
 		$choices = array();
+
+		// Add a placeholder option
+		$choices[] = array(
+			'label' => esc_html__( 'Select a List', 'gravityforms-klaviyo' ),
+			'value' => '',
+		);
 
 		// Make sure we have valid credentials before calling the API.
 		if ( ! $this->initialize_api() ) {
@@ -512,7 +513,8 @@ class GF_Klaviyo extends GFFeedAddOn {
 
 		if ( false !== $cached_lists ) {
 			$this->log_debug( __METHOD__ . '(): Using cached Klaviyo lists.' );
-			return $cached_lists;
+			// Merge placeholder with cached lists
+			return array_merge( array( $choices[0] ), $cached_lists );
 		}
 
 		// Fetch lists from Klaviyo API
@@ -556,6 +558,8 @@ class GF_Klaviyo extends GFFeedAddOn {
 			return $choices;
 		}
 
+		$list_choices = array();
+
 		// Parse JSON:API format
 		foreach ( $body['data'] as $list ) {
 			if ( empty( $list['id'] ) || empty( $list['attributes']['name'] ) ) {
@@ -565,18 +569,20 @@ class GF_Klaviyo extends GFFeedAddOn {
 			$list_id = $list['id'];
 			$list_name = $list['attributes']['name'];
 
-			$choices[] = array(
-				'name'  => 'lists', // Must match the field name for checkbox fields
+			$list_choices[] = array(
 				'label' => esc_html( $list_name ),
 				'value' => esc_attr( $list_id ),
 			);
 		}
 
 		// Cache the results for 1 hour
-		GFCache::set( $cache_key, $choices, 3600 );
+		GFCache::set( $cache_key, $list_choices, 3600 );
+
+		// Merge placeholder with list choices
+		$choices = array_merge( array( $choices[0] ), $list_choices );
 
 		// Log how many choices were loaded for debugging
-		$this->log_debug( __METHOD__ . '(): Loaded ' . count( $choices ) . ' Klaviyo list choices.' );
+		$this->log_debug( __METHOD__ . '(): Loaded ' . count( $list_choices ) . ' Klaviyo list choices.' );
 
 		return $choices;
 	}
@@ -690,13 +696,16 @@ class GF_Klaviyo extends GFFeedAddOn {
 			return;
 		}
 
-		// Get lists - required
-		$lists = rgars( $feed, 'meta/lists' );
-		if ( empty( $lists ) || ! is_array( $lists ) ) {
-			$this->log_error( 'No lists selected in feed.' );
-			$this->add_feed_error( esc_html__( 'At least one Klaviyo list must be selected.', 'gravityforms-klaviyo' ), $feed, $entry, $form );
+		// Get list - required (now a single value from dropdown)
+		$list_id = rgars( $feed, 'meta/lists' );
+		if ( empty( $list_id ) ) {
+			$this->log_error( 'No list selected in feed.' );
+			$this->add_feed_error( esc_html__( 'A Klaviyo list must be selected.', 'gravityforms-klaviyo' ), $feed, $entry, $form );
 			return;
 		}
+
+		// Convert single list ID to array for subscription method
+		$lists = array( $list_id );
 
 		// Get consent - required
 		$consent = rgars( $feed, 'meta/consent' );
@@ -972,9 +981,9 @@ class GF_Klaviyo extends GFFeedAddOn {
 			$this->set_field_error( $field, esc_html__( 'Email field is required.', 'gravityforms-klaviyo' ) );
 		}
 
-		// Validate at least one list is selected
-		if ( 'lists' === $field['name'] && ( empty( $field_setting ) || ! is_array( $field_setting ) ) ) {
-			$this->set_field_error( $field, esc_html__( 'At least one list must be selected.', 'gravityforms-klaviyo' ) );
+		// Validate list is selected
+		if ( 'lists' === $field['name'] && empty( $field_setting ) ) {
+			$this->set_field_error( $field, esc_html__( 'A list must be selected.', 'gravityforms-klaviyo' ) );
 		}
 
 		// Validate consent is selected
