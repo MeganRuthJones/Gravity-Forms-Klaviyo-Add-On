@@ -212,6 +212,12 @@ class GF_Klaviyo extends GFFeedAddOn {
 				'tooltip'  => '<h6>' . esc_html__( 'Email Address', 'gravityforms-klaviyo' ) . '</h6>' . esc_html__( 'Select the form field that contains the email address. This field is required.', 'gravityforms-klaviyo' ),
 			),
 			array(
+				'name'     => 'title',
+				'label'    => esc_html__( 'Title', 'gravityforms-klaviyo' ),
+				'type'     => 'field_select',
+				'required' => false,
+			),
+			array(
 				'name'     => 'first_name',
 				'label'    => esc_html__( 'First Name', 'gravityforms-klaviyo' ),
 				'type'     => 'field_select',
@@ -233,12 +239,6 @@ class GF_Klaviyo extends GFFeedAddOn {
 			array(
 				'name'     => 'organization',
 				'label'    => esc_html__( 'Organization', 'gravityforms-klaviyo' ),
-				'type'     => 'field_select',
-				'required' => false,
-			),
-			array(
-				'name'     => 'title',
-				'label'    => esc_html__( 'Title', 'gravityforms-klaviyo' ),
 				'type'     => 'field_select',
 				'required' => false,
 			),
@@ -517,66 +517,98 @@ class GF_Klaviyo extends GFFeedAddOn {
 			return array_merge( array( $choices[0] ), $cached_lists );
 		}
 
-		// Fetch lists from Klaviyo API
-		$url = 'https://a.klaviyo.com/api/lists/';
-
-		$this->log_debug( __METHOD__ . '(): Attempting to fetch lists from: ' . $url );
-		$response = wp_remote_get(
-			$url,
-			array(
-				'headers' => array(
-					'Authorization' => 'Klaviyo-API-Key ' . sanitize_text_field( $api_key ),
-					'Content-Type'  => 'application/json',
-					'Revision'      => '2024-10-15',
-					'User-Agent'    => 'Gravity Forms Klaviyo Add-On/' . $this->_version,
-				),
-				'timeout' => 15,
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			$this->log_error( __METHOD__ . '(): Failed to retrieve Klaviyo lists. ' . $response->get_error_message() );
-			return $choices;
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		$body_raw = wp_remote_retrieve_body( $response );
-		
-		if ( 200 !== $code ) {
-			$this->log_error( __METHOD__ . '(): Unexpected response code when retrieving Klaviyo lists: ' . $code . '. Response body: ' . $body_raw );
-			return $choices;
-		}
-
-		$body = json_decode( $body_raw, true );
-
-		// Log the raw response for debugging
-		$this->log_debug( __METHOD__ . '(): Klaviyo API response body: ' . print_r( $body, true ) );
-
-		// Klaviyo returns data in JSON:API format
-		if ( empty( $body['data'] ) || ! is_array( $body['data'] ) ) {
-			$this->log_debug( __METHOD__ . '(): No lists found in Klaviyo response.' );
-			return $choices;
-		}
-
+		// Fetch lists from Klaviyo API with pagination support
 		$list_choices = array();
+		$page_cursor = null;
+		$has_more = true;
 
-		// Parse JSON:API format
-		foreach ( $body['data'] as $list ) {
-			if ( empty( $list['id'] ) || empty( $list['attributes']['name'] ) ) {
-				continue;
+		while ( $has_more ) {
+			$url = 'https://a.klaviyo.com/api/lists/';
+			
+			// Add pagination if we have a cursor
+			if ( $page_cursor ) {
+				$url = add_query_arg( 'page[cursor]', $page_cursor, $url );
 			}
 
-			$list_id = $list['id'];
-			$list_name = $list['attributes']['name'];
-
-			$list_choices[] = array(
-				'label' => esc_html( $list_name ),
-				'value' => esc_attr( $list_id ),
+			$this->log_debug( __METHOD__ . '(): Attempting to fetch lists from: ' . $url );
+			$response = wp_remote_get(
+				$url,
+				array(
+					'headers' => array(
+						'Authorization' => 'Klaviyo-API-Key ' . sanitize_text_field( $api_key ),
+						'Content-Type'  => 'application/json',
+						'Revision'      => '2024-10-15',
+						'User-Agent'    => 'Gravity Forms Klaviyo Add-On/' . $this->_version,
+					),
+					'timeout' => 15,
+				)
 			);
+
+			if ( is_wp_error( $response ) ) {
+				$this->log_error( __METHOD__ . '(): Failed to retrieve Klaviyo lists. ' . $response->get_error_message() );
+				break;
+			}
+
+			$code = wp_remote_retrieve_response_code( $response );
+			$body_raw = wp_remote_retrieve_body( $response );
+			
+			if ( 200 !== $code ) {
+				$this->log_error( __METHOD__ . '(): Unexpected response code when retrieving Klaviyo lists: ' . $code . '. Response body: ' . $body_raw );
+				break;
+			}
+
+			$body = json_decode( $body_raw, true );
+
+			// Log the raw response for debugging (only on first page to avoid spam)
+			if ( ! $page_cursor ) {
+				$this->log_debug( __METHOD__ . '(): Klaviyo API response body: ' . print_r( $body, true ) );
+			}
+
+			// Klaviyo returns data in JSON:API format
+			if ( empty( $body['data'] ) || ! is_array( $body['data'] ) ) {
+				$this->log_debug( __METHOD__ . '(): No lists found in Klaviyo response.' );
+				break;
+			}
+
+			// Parse JSON:API format
+			foreach ( $body['data'] as $list ) {
+				if ( empty( $list['id'] ) || empty( $list['attributes']['name'] ) ) {
+					continue;
+				}
+
+				$list_id = $list['id'];
+				$list_name = $list['attributes']['name'];
+
+				$list_choices[] = array(
+					'label' => esc_html( $list_name ),
+					'value' => esc_attr( $list_id ),
+				);
+			}
+
+			// Check for pagination
+			if ( ! empty( $body['links']['next'] ) ) {
+				// Extract cursor from next link
+				$next_url = $body['links']['next'];
+				$parsed_url = parse_url( $next_url );
+				if ( ! empty( $parsed_url['query'] ) ) {
+					parse_str( $parsed_url['query'], $query_params );
+					if ( ! empty( $query_params['page']['cursor'] ) ) {
+						$page_cursor = $query_params['page']['cursor'];
+					} else {
+						$has_more = false;
+					}
+				} else {
+					$has_more = false;
+				}
+			} else {
+				$has_more = false;
+			}
 		}
 
 		// Cache the results for 1 hour
-		GFCache::set( $cache_key, $list_choices, 3600 );
+		if ( ! empty( $list_choices ) ) {
+			GFCache::set( $cache_key, $list_choices, 3600 );
+		}
 
 		// Merge placeholder with list choices
 		$choices = array_merge( array( $choices[0] ), $list_choices );
