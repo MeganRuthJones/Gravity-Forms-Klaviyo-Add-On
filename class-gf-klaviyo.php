@@ -507,14 +507,20 @@ class GF_Klaviyo extends GFFeedAddOn {
 			return $choices;
 		}
 
-		// Check cache first
+		// Check cache first - but only if it has actual data
 		$cache_key = 'gf_klaviyo_lists_' . md5( $api_key );
 		$cached_lists = GFCache::get( $cache_key );
 
-		if ( false !== $cached_lists ) {
-			$this->log_debug( __METHOD__ . '(): Using cached Klaviyo lists.' );
+		if ( false !== $cached_lists && is_array( $cached_lists ) && ! empty( $cached_lists ) ) {
+			$this->log_debug( __METHOD__ . '(): Using cached Klaviyo lists. Found ' . count( $cached_lists ) . ' lists.' );
 			// Merge placeholder with cached lists
 			return array_merge( array( $choices[0] ), $cached_lists );
+		}
+
+		// If cache exists but is empty, clear it and fetch fresh
+		if ( false !== $cached_lists && empty( $cached_lists ) ) {
+			$this->log_debug( __METHOD__ . '(): Cached lists were empty, clearing cache and fetching fresh.' );
+			GFCache::delete( $cache_key );
 		}
 
 		// Fetch lists from Klaviyo API with pagination support
@@ -605,16 +611,27 @@ class GF_Klaviyo extends GFFeedAddOn {
 			}
 		}
 
-		// Cache the results for 1 hour
+		// Sort lists alphabetically by name
 		if ( ! empty( $list_choices ) ) {
-			GFCache::set( $cache_key, $list_choices, 3600 );
+			usort( $list_choices, function( $a, $b ) {
+				return strcasecmp( $a['label'], $b['label'] );
+			});
+		}
+
+		// Cache the results for 30 minutes (reduced from 1 hour for fresher data)
+		if ( ! empty( $list_choices ) ) {
+			GFCache::set( $cache_key, $list_choices, 1800 );
+			$this->log_debug( __METHOD__ . '(): Cached ' . count( $list_choices ) . ' Klaviyo lists for 30 minutes.' );
+		} else {
+			// If no lists found, log a warning but don't cache empty results
+			$this->log_error( __METHOD__ . '(): No lists found in Klaviyo account. Please check your Klaviyo account has lists created.' );
 		}
 
 		// Merge placeholder with list choices
 		$choices = array_merge( array( $choices[0] ), $list_choices );
 
 		// Log how many choices were loaded for debugging
-		$this->log_debug( __METHOD__ . '(): Loaded ' . count( $list_choices ) . ' Klaviyo list choices.' );
+		$this->log_debug( __METHOD__ . '(): Loaded ' . count( $list_choices ) . ' Klaviyo list choices from API.' );
 
 		return $choices;
 	}
@@ -634,12 +651,17 @@ class GF_Klaviyo extends GFFeedAddOn {
 		// Clear the cached API initialization result so feedback callbacks use fresh values.
 		$this->api_initialized = null;
 
-		// Clear cached lists when API key changes
+		// Clear cached lists when API key changes or settings are updated
 		if ( isset( $settings['api_key'] ) ) {
 			$old_api_key = $this->get_plugin_setting( 'api_key' );
 			if ( $old_api_key !== $settings['api_key'] ) {
-				$cache_key = 'gf_klaviyo_lists_' . md5( $old_api_key );
-				GFCache::delete( $cache_key );
+				// Clear cache for old API key
+				$old_cache_key = 'gf_klaviyo_lists_' . md5( $old_api_key );
+				GFCache::delete( $old_cache_key );
+				// Clear cache for new API key too (will be regenerated on next fetch)
+				$new_cache_key = 'gf_klaviyo_lists_' . md5( $settings['api_key'] );
+				GFCache::delete( $new_cache_key );
+				$this->log_debug( __METHOD__ . '(): Cleared list cache due to API key change.' );
 			}
 		}
 
