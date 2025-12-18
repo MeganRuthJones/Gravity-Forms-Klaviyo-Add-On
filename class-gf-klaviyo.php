@@ -651,12 +651,17 @@ class GF_Klaviyo extends GFFeedAddOn {
 		// Clear the cached API initialization result so feedback callbacks use fresh values.
 		$this->api_initialized = null;
 
-		// Clear cached lists when API key changes
+		// Clear cached lists when API key changes or settings are updated
 		if ( isset( $settings['api_key'] ) ) {
 			$old_api_key = $this->get_plugin_setting( 'api_key' );
 			if ( $old_api_key !== $settings['api_key'] ) {
-				$cache_key = 'gf_klaviyo_lists_' . md5( $old_api_key );
-				GFCache::delete( $cache_key );
+				// Clear cache for old API key
+				$old_cache_key = 'gf_klaviyo_lists_' . md5( $old_api_key );
+				GFCache::delete( $old_cache_key );
+				// Clear cache for new API key too (will be regenerated on next fetch)
+				$new_cache_key = 'gf_klaviyo_lists_' . md5( $settings['api_key'] );
+				GFCache::delete( $new_cache_key );
+				$this->log_debug( __METHOD__ . '(): Cleared list cache due to API key change.' );
 			}
 		}
 
