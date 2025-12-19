@@ -949,6 +949,8 @@ class GF_Klaviyo extends GFFeedAddOn {
 			return new WP_Error( 'api_error', esc_html__( 'No list ID provided.', 'gravityforms-klaviyo' ) );
 		}
 
+		// Use the bulk subscription endpoint with list in relationships
+		// The list should be in relationships, not attributes
 		$subscription_data = array(
 			'data' => array(
 				'type'       => 'profile-subscription-bulk-create-job',
@@ -961,7 +963,14 @@ class GF_Klaviyo extends GFFeedAddOn {
 							),
 						),
 					),
-					'list_id' => $list_id,
+				),
+				'relationships' => array(
+					'list' => array(
+						'data' => array(
+							'type' => 'list',
+							'id'   => $list_id,
+						),
+					),
 				),
 			),
 		);
