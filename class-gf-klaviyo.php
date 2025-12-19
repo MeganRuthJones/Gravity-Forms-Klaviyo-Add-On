@@ -782,11 +782,12 @@ class GF_Klaviyo extends GFFeedAddOn {
 			}
 		}
 
+		// Initialize properties array for custom properties and tags
+		$properties = array();
+
 		// Map custom properties
 		$custom_properties = rgars( $feed, 'meta/custom_properties' );
 		if ( ! empty( $custom_properties ) && is_array( $custom_properties ) ) {
-			$attributes['properties'] = array();
-
 			foreach ( $custom_properties as $mapped_field ) {
 				// Handle both old format (associative array) and new format (array of objects).
 				if ( isset( $mapped_field['key'] ) && isset( $mapped_field['value'] ) ) {
@@ -808,7 +809,9 @@ class GF_Klaviyo extends GFFeedAddOn {
 					continue;
 				}
 
-				$attributes['properties'][ sanitize_text_field( $property_name ) ] = sanitize_text_field( $field_value );
+				// Ensure field value is a string (Klaviyo may reject non-string types)
+				$field_value = is_array( $field_value ) ? implode( ', ', $field_value ) : (string) $field_value;
+				$properties[ sanitize_text_field( $property_name ) ] = sanitize_text_field( $field_value );
 			}
 		}
 
@@ -818,8 +821,13 @@ class GF_Klaviyo extends GFFeedAddOn {
 			$tags_array = array_map( 'trim', explode( ',', $tags ) );
 			$tags_array = array_filter( $tags_array );
 			if ( ! empty( $tags_array ) ) {
-				$attributes['properties']['$tags'] = array_map( 'sanitize_text_field', $tags_array );
+				$properties['$tags'] = array_map( 'sanitize_text_field', $tags_array );
 			}
+		}
+
+		// Only add properties if we have any
+		if ( ! empty( $properties ) ) {
+			$attributes['properties'] = $properties;
 		}
 
 		// Build JSON:API format
@@ -844,6 +852,9 @@ class GF_Klaviyo extends GFFeedAddOn {
 	private function create_or_update_profile( $api_key, $profile_data, $entry ) {
 		$url = 'https://a.klaviyo.com/api/profiles/';
 
+		// Log the request for debugging
+		$this->log_debug( 'Klaviyo profile API request: ' . wp_json_encode( $profile_data ) );
+
 		$response = wp_remote_post(
 			$url,
 			array(
@@ -864,6 +875,10 @@ class GF_Klaviyo extends GFFeedAddOn {
 
 		$response_code = wp_remote_retrieve_response_code( $response );
 		$response_body = wp_remote_retrieve_body( $response );
+
+		// Log the response for debugging
+		$this->log_debug( 'Klaviyo profile API response code: ' . $response_code );
+		$this->log_debug( 'Klaviyo profile API response body: ' . $response_body );
 
 		if ( 201 !== $response_code && 200 !== $response_code ) {
 			$error_data = json_decode( $response_body, true );
