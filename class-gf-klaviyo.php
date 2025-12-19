@@ -926,6 +926,14 @@ class GF_Klaviyo extends GFFeedAddOn {
 		//     $profile_attributes['consent'] = $consent;
 		// }
 
+		// Since we're using a single list (dropdown), get the first list ID
+		$list_id = ! empty( $lists ) ? sanitize_text_field( $lists[0] ) : '';
+
+		if ( empty( $list_id ) ) {
+			$this->log_error( 'No list ID provided for subscription.' );
+			return new WP_Error( 'api_error', esc_html__( 'No list ID provided.', 'gravityforms-klaviyo' ) );
+		}
+
 		$subscription_data = array(
 			'data' => array(
 				'type'       => 'profile-subscription-bulk-create-job',
@@ -938,7 +946,7 @@ class GF_Klaviyo extends GFFeedAddOn {
 							),
 						),
 					),
-					'list_ids' => array_map( 'sanitize_text_field', $lists ),
+					'list_id' => $list_id,
 				),
 			),
 		);
