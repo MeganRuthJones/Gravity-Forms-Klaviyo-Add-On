@@ -914,14 +914,17 @@ class GF_Klaviyo extends GFFeedAddOn {
 		$this->log_debug( 'Determined consent for subscription: ' . implode( ', ', $consent ) );
 
 		// Build profile attributes with email
+		// Note: Consent parameter temporarily removed to debug API issues
+		// Will be re-added once we confirm the correct format from Klaviyo API
 		$profile_attributes = array(
 			'email' => sanitize_email( $email ),
 		);
 
-		// Add consent only if we have it (make it optional to avoid API errors)
-		if ( ! empty( $consent ) && is_array( $consent ) ) {
-			$profile_attributes['consent'] = $consent;
-		}
+		// TODO: Re-add consent once we confirm the correct API format
+		// The consent array is determined above but not included in API call for now
+		// if ( ! empty( $consent ) && is_array( $consent ) ) {
+		//     $profile_attributes['consent'] = $consent;
+		// }
 
 		$subscription_data = array(
 			'data' => array(
