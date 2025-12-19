@@ -743,7 +743,7 @@ class GF_Klaviyo extends GFFeedAddOn {
 		}
 
 		// Step 2: Subscribe to lists
-		$subscription_result = $this->subscribe_to_lists( $api_key, $email, $lists, $entry );
+		$subscription_result = $this->subscribe_to_lists( $api_key, $email, $lists, $feed, $entry );
 
 		if ( is_wp_error( $subscription_result ) ) {
 			$this->log_error( 'Failed to subscribe to lists in Klaviyo: ' . $subscription_result->get_error_message() );
@@ -892,31 +892,26 @@ class GF_Klaviyo extends GFFeedAddOn {
 	 * @param string $api_key API key
 	 * @param string $email   Email address
 	 * @param array  $lists   Array of list IDs
+	 * @param array  $feed    Feed object
 	 * @param array  $entry   Entry object
 	 * @return bool|WP_Error True on success, WP_Error on failure
 	 */
-	private function subscribe_to_lists( $api_key, $email, $lists, $entry ) {
-		// Build subscription data in JSON:API format
-		$subscriptions = array();
+	private function subscribe_to_lists( $api_key, $email, $lists, $feed, $entry ) {
+		// Determine consent automatically based on form data
+		// Always include email consent since form was submitted
+		$consent = array( 'email' );
 
-		foreach ( $lists as $list_id ) {
-			$subscriptions[] = array(
-				'type'       => 'profile-subscription-bulk-create-job',
-				'attributes' => array(
-					'profiles' => array(
-						'data' => array(
-							array(
-								'type'       => 'profile',
-								'attributes' => array(
-									'email' => sanitize_email( $email ),
-								),
-							),
-						),
-					),
-					'list_id'  => sanitize_text_field( $list_id ),
-				),
-			);
+		// Check if phone number is mapped and has a value
+		$phone_field_id = rgars( $feed, 'meta/phone_number' );
+		if ( ! empty( $phone_field_id ) ) {
+			$phone_value = rgar( $entry, $phone_field_id );
+			if ( ! empty( $phone_value ) ) {
+				// Phone number is mapped and has a value, add SMS consent
+				$consent[] = 'sms';
+			}
 		}
+
+		$this->log_debug( 'Determined consent for subscription: ' . implode( ', ', $consent ) );
 
 		$subscription_data = array(
 			'data' => array(
@@ -927,7 +922,8 @@ class GF_Klaviyo extends GFFeedAddOn {
 							array(
 								'type'       => 'profile',
 								'attributes' => array(
-									'email' => sanitize_email( $email ),
+									'email'   => sanitize_email( $email ),
+									'consent' => $consent,
 								),
 							),
 						),
