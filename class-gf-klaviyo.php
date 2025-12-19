@@ -259,7 +259,7 @@ class GF_Klaviyo extends GFFeedAddOn {
 					'placeholder'  => esc_html__( 'Select a Value', 'gravityforms-klaviyo' ),
 				),
 				'disable_custom' => false,
-				'description'    => '<p>' . esc_html__( 'Map form fields to Klaviyo custom properties. Enter a property name (left column) and map it to a Gravity Forms field (right column). Address fields and other custom data should be mapped here.', 'gravityforms-klaviyo' ) . '</p>',
+				'description'    => '<p>' . esc_html__( 'Map form fields to Klaviyo custom properties. Enter or create a property name (left column) and map it to a Gravity Forms field (right column). Address fields and other custom data should be mapped here.', 'gravityforms-klaviyo' ) . '</p>',
 				'tooltip'        => '<h6>' . esc_html__( 'Custom Properties', 'gravityforms-klaviyo' ) . '</h6>' . esc_html__( 'Map form fields to Klaviyo custom properties. The left column is the property name in Klaviyo, and the right column allows you to select the form field to map to it.', 'gravityforms-klaviyo' ),
 			),
 		);
