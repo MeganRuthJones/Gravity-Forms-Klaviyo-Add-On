@@ -913,6 +913,16 @@ class GF_Klaviyo extends GFFeedAddOn {
 
 		$this->log_debug( 'Determined consent for subscription: ' . implode( ', ', $consent ) );
 
+		// Build profile attributes with email
+		$profile_attributes = array(
+			'email' => sanitize_email( $email ),
+		);
+
+		// Add consent only if we have it (make it optional to avoid API errors)
+		if ( ! empty( $consent ) && is_array( $consent ) ) {
+			$profile_attributes['consent'] = $consent;
+		}
+
 		$subscription_data = array(
 			'data' => array(
 				'type'       => 'profile-subscription-bulk-create-job',
@@ -921,10 +931,7 @@ class GF_Klaviyo extends GFFeedAddOn {
 						'data' => array(
 							array(
 								'type'       => 'profile',
-								'attributes' => array(
-									'email'   => sanitize_email( $email ),
-									'consent' => $consent,
-								),
+								'attributes' => $profile_attributes,
 							),
 						),
 					),
@@ -955,6 +962,11 @@ class GF_Klaviyo extends GFFeedAddOn {
 
 		$response_code = wp_remote_retrieve_response_code( $response );
 		$response_body = wp_remote_retrieve_body( $response );
+
+		// Log the request and response for debugging
+		$this->log_debug( 'Klaviyo subscription API request: ' . wp_json_encode( $subscription_data ) );
+		$this->log_debug( 'Klaviyo subscription API response code: ' . $response_code );
+		$this->log_debug( 'Klaviyo subscription API response body: ' . $response_body );
 
 		if ( 202 !== $response_code && 201 !== $response_code && 200 !== $response_code ) {
 			$error_data = json_decode( $response_body, true );
