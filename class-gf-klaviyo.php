@@ -264,33 +264,6 @@ class GF_Klaviyo extends GFFeedAddOn {
 			),
 		);
 
-		// Consent field - required by Klaviyo
-		$consent_field = array(
-			'name'     => 'consent',
-			'label'    => esc_html__( 'Consent Type', 'gravityforms-klaviyo' ),
-			'type'     => 'select',
-			'required' => true,
-			'choices'  => array(
-				array(
-					'label' => esc_html__( 'Email only', 'gravityforms-klaviyo' ),
-					'value' => 'email',
-				),
-				array(
-					'label' => esc_html__( 'SMS only', 'gravityforms-klaviyo' ),
-					'value' => 'sms',
-				),
-				array(
-					'label' => esc_html__( 'Email and SMS', 'gravityforms-klaviyo' ),
-					'value' => 'email,sms',
-				),
-				array(
-					'label' => esc_html__( 'Web', 'gravityforms-klaviyo' ),
-					'value' => 'web',
-				),
-			),
-			'tooltip'  => '<h6>' . esc_html__( 'Consent Type', 'gravityforms-klaviyo' ) . '</h6>' . esc_html__( 'Select the consent type for this subscription. This is required for compliance.', 'gravityforms-klaviyo' ),
-		);
-
 		$additional_settings = array(
 			array(
 				'name'    => 'tags',
@@ -319,10 +292,6 @@ class GF_Klaviyo extends GFFeedAddOn {
 			array(
 				'title'  => esc_html__( 'Custom Properties', 'gravityforms-klaviyo' ),
 				'fields' => $custom_fields,
-			),
-			array(
-				'title'  => esc_html__( 'Consent', 'gravityforms-klaviyo' ),
-				'fields' => array( $consent_field ),
 			),
 			array(
 				'title'  => esc_html__( 'Additional Settings', 'gravityforms-klaviyo' ),
@@ -761,14 +730,6 @@ class GF_Klaviyo extends GFFeedAddOn {
 		// Convert single list ID to array for subscription method
 		$lists = array( $list_id );
 
-		// Get consent - required
-		$consent = rgars( $feed, 'meta/consent' );
-		if ( empty( $consent ) ) {
-			$this->log_error( 'Consent type is not set in feed.' );
-			$this->add_feed_error( esc_html__( 'Consent type must be selected.', 'gravityforms-klaviyo' ), $feed, $entry, $form );
-			return;
-		}
-
 		// Build profile data in JSON:API format
 		$profile_data = $this->build_profile_data( $feed, $entry, $form, $email );
 
@@ -782,7 +743,7 @@ class GF_Klaviyo extends GFFeedAddOn {
 		}
 
 		// Step 2: Subscribe to lists
-		$subscription_result = $this->subscribe_to_lists( $api_key, $email, $lists, $consent, $entry );
+		$subscription_result = $this->subscribe_to_lists( $api_key, $email, $lists, $entry );
 
 		if ( is_wp_error( $subscription_result ) ) {
 			$this->log_error( 'Failed to subscribe to lists in Klaviyo: ' . $subscription_result->get_error_message() );
@@ -931,11 +892,10 @@ class GF_Klaviyo extends GFFeedAddOn {
 	 * @param string $api_key API key
 	 * @param string $email   Email address
 	 * @param array  $lists   Array of list IDs
-	 * @param string $consent Consent type
 	 * @param array  $entry   Entry object
 	 * @return bool|WP_Error True on success, WP_Error on failure
 	 */
-	private function subscribe_to_lists( $api_key, $email, $lists, $consent, $entry ) {
+	private function subscribe_to_lists( $api_key, $email, $lists, $entry ) {
 		// Build subscription data in JSON:API format
 		$subscriptions = array();
 
@@ -967,8 +927,7 @@ class GF_Klaviyo extends GFFeedAddOn {
 							array(
 								'type'       => 'profile',
 								'attributes' => array(
-									'email'   => sanitize_email( $email ),
-									'consent' => sanitize_text_field( $consent ),
+									'email' => sanitize_email( $email ),
 								),
 							),
 						),
@@ -1038,11 +997,6 @@ class GF_Klaviyo extends GFFeedAddOn {
 		// Validate list is selected
 		if ( 'lists' === $field['name'] && empty( $field_setting ) ) {
 			$this->set_field_error( $field, esc_html__( 'A list must be selected.', 'gravityforms-klaviyo' ) );
-		}
-
-		// Validate consent is selected
-		if ( 'consent' === $field['name'] && empty( $field_setting ) ) {
-			$this->set_field_error( $field, esc_html__( 'Consent type is required.', 'gravityforms-klaviyo' ) );
 		}
 	}
 
